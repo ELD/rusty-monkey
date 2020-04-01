@@ -1,0 +1,18 @@
+[package]
+name = "MonkeyLang"
+version = "0.1.0"
+authors = ["Eric Dattore <eric.dattore@gmail.com>"]
+edition = "2018"
+
+[lib]
+path = "src/lib.rs"
+name = "libmonkey"
+
+[[bin]]
+path = "src/bin/main.rs"
+name = "monkey"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nom = "5"
