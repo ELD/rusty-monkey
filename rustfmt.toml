@@ -1,0 +1,9 @@
+blank_lines_upper_bound = 1
+condense_wildcard_suffixes = true
+edition = "2018"
+format_code_in_doc_comments = true
+merge_imports = true
+reorder_impl_items = true
+use_field_init_shorthand = true
+use_try_shorthand = true
+wrap_comments = true
