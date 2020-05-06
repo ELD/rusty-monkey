@@ -1,12 +1,10 @@
-use crate::{
-    ast::{Block, Expr, Ident, Infix, Literal, Precedence, Prefix, Program, Statement},
-    lexer::whitespace,
-};
+use crate::ast::{Block, Expr, Ident, Infix, Literal, Precedence, Prefix, Program, Statement};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take, take_while1},
+    bytes::complete::{tag, take, take_while, take_while1},
     character::complete::alpha1,
     combinator::{map, peek},
+    error::ParseError,
     multi::many0,
     sequence::{delimited, preceded},
     Err::Error,
@@ -36,11 +34,11 @@ impl Parser {
     }
 
     fn parse_let_statement(input: &str) -> IResult<&str, Statement> {
-        let (i, _) = preceded(whitespace, tag("let"))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("let"))(input)?;
 
         let (i, ident) = map(Self::parse_ident, |ident| ident)(i)?;
 
-        let (i, _) = preceded(whitespace, tag("="))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag("="))(i)?;
         let (i, expr) = Self::parse_expression(i, Precedence::Lowest)?;
 
         let (i, _) = if Self::peek_semicolon(i).is_ok() {
@@ -53,7 +51,7 @@ impl Parser {
     }
 
     fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
-        let (i, _) = preceded(whitespace, tag("return"))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("return"))(input)?;
 
         let (i, expr) = Self::parse_expression(i, Precedence::Lowest)?;
 
@@ -98,7 +96,7 @@ impl Parser {
     fn parse_ident(input: &str) -> IResult<&str, Ident> {
         map(
             preceded(
-                whitespace,
+                Self::whitespace,
                 preceded(
                     peek(alt((alpha1, tag("_")))),
                     take_while1(|c: char| c.is_alphanumeric() || c == '_'),
@@ -110,14 +108,14 @@ impl Parser {
 
     fn parse_integer(input: &str) -> IResult<&str, i64> {
         map(
-            preceded(whitespace, take_while1(|c: char| c.is_numeric())),
+            preceded(Self::whitespace, take_while1(|c: char| c.is_numeric())),
             |number: &str| number.parse::<i64>().unwrap(),
         )(input)
     }
 
     fn parse_boolean(input: &str) -> IResult<&str, bool> {
         map(
-            preceded(whitespace, alt((tag("true"), tag("false")))),
+            preceded(Self::whitespace, alt((tag("true"), tag("false")))),
             |bool_literal| bool_literal == "true",
         )(input)
     }
@@ -190,17 +188,17 @@ impl Parser {
     }
 
     fn parse_paren_expression(input: &str) -> IResult<&str, Expr> {
-        let (i, _) = preceded(whitespace, tag("("))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("("))(input)?;
         let (i, expr) = Self::parse_expression(i, Precedence::Lowest)?;
-        let (i, _) = preceded(whitespace, tag(")"))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag(")"))(i)?;
 
         Ok((i, expr))
     }
 
     fn parse_if_expression(input: &str) -> IResult<&str, Expr> {
-        let (i, _) = preceded(whitespace, tag("if"))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("if"))(input)?;
         let (i, condition) = Self::parse_expression(i, Precedence::Lowest)?;
-        let (i, _) = preceded(whitespace, tag("{"))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag("{"))(i)?;
         let (i, consequence) = Self::parse_block_statement(i)?;
 
         let (i, alternative) = if Self::peek_else(i).is_ok() {
@@ -229,16 +227,16 @@ impl Parser {
             input = inner_input;
         }
 
-        let (input, _) = preceded(whitespace, tag("}"))(input)?;
+        let (input, _) = preceded(Self::whitespace, tag("}"))(input)?;
 
         Ok((input, statements))
     }
 
     fn parse_fn_literal_expression(input: &str) -> IResult<&str, Expr> {
-        let (i, _) = preceded(whitespace, tag("fn"))(input)?;
-        let (i, _) = preceded(whitespace, tag("("))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag("fn"))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("("))(i)?;
         let (i, params) = Self::parse_fn_params(i)?;
-        let (i, _) = preceded(whitespace, tag("{"))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag("{"))(i)?;
 
         let (i, body) = Self::parse_block_statement(i)?;
 
@@ -263,19 +261,19 @@ impl Parser {
             i = inner_i;
         }
 
-        let (i, _) = preceded(whitespace, tag(")"))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag(")"))(i)?;
 
         Ok((i, idents))
     }
 
     fn parse_call_arguments(input: &str) -> IResult<&str, Vec<Expr>> {
-        let (i, _) = preceded(whitespace, tag("("))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag("("))(input)?;
 
         let (i, expr) = Self::parse_expression(i, Precedence::Lowest)?;
 
         let (i, mut expr_list) = many0(Self::parse_comma_expr)(i)?;
 
-        let (i, _) = preceded(whitespace, tag(")"))(i)?;
+        let (i, _) = preceded(Self::whitespace, tag(")"))(i)?;
 
         expr_list.insert(0, expr);
 
@@ -283,7 +281,7 @@ impl Parser {
     }
 
     fn parse_comma_expr(input: &str) -> IResult<&str, Expr> {
-        let (i, _) = preceded(whitespace, tag(","))(input)?;
+        let (i, _) = preceded(Self::whitespace, tag(","))(input)?;
         let (i, expr) = Self::parse_expression(i, Precedence::Lowest)?;
 
         Ok((i, expr))
@@ -291,7 +289,7 @@ impl Parser {
 
     fn parse_operator(input: &str) -> IResult<&str, (Precedence, Option<Infix>)> {
         preceded(
-            whitespace,
+            Self::whitespace,
             alt((
                 map(tag("+"), |_| (Precedence::Sum, Some(Infix::Plus))),
                 map(tag("-"), |_| (Precedence::Sum, Some(Infix::Minus))),
@@ -318,26 +316,32 @@ impl Parser {
 
     fn parse_else(input: &str) -> IResult<&str, &str> {
         delimited(
-            preceded(whitespace, tag("else")),
-            whitespace,
-            preceded(whitespace, tag("{")),
+            preceded(Self::whitespace, tag("else")),
+            Self::whitespace,
+            preceded(Self::whitespace, tag("{")),
         )(input)
     }
 
     fn parse_comma(input: &str) -> IResult<&str, &str> {
-        preceded(whitespace, tag(","))(input)
+        preceded(Self::whitespace, tag(","))(input)
     }
 
     fn parse_right_paren(input: &str) -> IResult<&str, &str> {
-        preceded(whitespace, tag(")"))(input)
+        preceded(Self::whitespace, tag(")"))(input)
     }
 
     fn parse_semicolon(input: &str) -> IResult<&str, &str> {
-        preceded(whitespace, tag(";"))(input)
+        preceded(Self::whitespace, tag(";"))(input)
+    }
+
+    fn whitespace<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+        let whitespace_chars = " \t\r\n";
+
+        take_while(move |c| whitespace_chars.contains(c))(i)
     }
 
     fn peek_tag<'a>(tag_literal: &'a str, input: &'a str) -> IResult<&'a str, &'a str> {
-        peek(preceded(whitespace, tag(tag_literal)))(input)
+        peek(preceded(Self::whitespace, tag(tag_literal)))(input)
     }
 
     fn peek_precedence(input: &str) -> Precedence {
@@ -364,7 +368,7 @@ impl Parser {
     }
 
     fn peek_right_brace(input: &str) -> IResult<&str, &str> {
-        peek(preceded(whitespace, tag("}")))(input)
+        peek(preceded(Self::whitespace, tag("}")))(input)
     }
 
     fn peek_right_paren(input: &str) -> IResult<&str, &str> {
