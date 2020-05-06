@@ -1,8 +1,10 @@
+use std::{fmt, fmt::Display};
+
 pub(crate) type Program = Block;
 pub(crate) type Block = Vec<Statement>;
 pub(crate) type Ident = String;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Let(Ident, Expr),
     Return(Expr),
@@ -10,7 +12,7 @@ pub enum Statement {
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Ident(Ident),
     Literal(Literal),
@@ -32,20 +34,20 @@ pub enum Expr {
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Literal {
     Int(i64),
     String(String),
     Bool(bool),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Prefix {
     Minus,
     Bang,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Infix {
     Plus,
     Minus,
@@ -57,6 +59,23 @@ pub enum Infix {
     LessThanEqual,
     GreaterThan,
     LessThan,
+}
+
+impl Display for Infix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Infix::Plus => write!(f, "+"),
+            Infix::Minus => write!(f, "-"),
+            Infix::Multiply => write!(f, "*"),
+            Infix::Divide => write!(f, "/"),
+            Infix::Equal => write!(f, "=="),
+            Infix::NotEqual => write!(f, "!="),
+            Infix::GreaterThanEqual => write!(f, ">="),
+            Infix::LessThanEqual => write!(f, "<="),
+            Infix::GreaterThan => write!(f, ">"),
+            Infix::LessThan => write!(f, "<"),
+        }
+    }
 }
 
 #[derive(Debug, PartialOrd, PartialEq, Clone)]

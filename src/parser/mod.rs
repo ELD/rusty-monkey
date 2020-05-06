@@ -1,4 +1,8 @@
-use crate::ast::{Block, Expr, Ident, Infix, Literal, Precedence, Prefix, Program, Statement};
+pub mod ast;
+
+use crate::parser::ast::{
+    Block, Expr, Ident, Infix, Literal, Precedence, Prefix, Program, Statement,
+};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_while, take_while1},
@@ -121,7 +125,7 @@ impl Parser {
     }
 
     fn parse_expression(input: &str, precedence: Precedence) -> IResult<&str, Expr> {
-        let (mut next, mut left) = alt((
+        let (mut i, mut left) = alt((
             Self::parse_boolean_expression,
             Self::parse_integer_expression,
             Self::parse_prefix_expression,
@@ -131,33 +135,37 @@ impl Parser {
             Self::parse_ident_expression,
         ))(input)?;
 
-        while Self::peek_semicolon(next).is_err() && precedence < Self::peek_precedence(next) {
-            if peek(Self::parse_operator)(next).is_err() {
+        while Self::peek_semicolon(i).is_err() && precedence < Self::peek_precedence(i) {
+            if peek(Self::parse_operator)(i).is_err() {
                 break;
             }
 
-            let (inner_next, inner_left) = Self::parse_infix_expression(next, left.clone())?;
+            let (inner_i, inner_left) = Self::parse_infix_expression(i, left.clone())?;
             left = inner_left;
-            next = inner_next;
+            i = inner_i;
         }
 
-        Ok((next, left))
+        Ok((i, left))
     }
 
     fn parse_prefix_expression(input: &str) -> IResult<&str, Expr> {
-        let peek: IResult<&str, &str> = peek(alt((tag("!"), tag("-"))))(input);
+        let peek: IResult<&str, &str> =
+            peek(preceded(Self::whitespace, alt((tag("!"), tag("-")))))(input);
 
         if peek.is_err() {
             return Err(Error((input, nom::error::ErrorKind::Tag)));
         }
 
-        let (i, prefix) = map(alt((tag("!"), tag("-"))), |prefix_op| {
-            if prefix_op == "!" {
-                Prefix::Bang
-            } else {
-                Prefix::Minus
-            }
-        })(input)?;
+        let (i, prefix) = map(
+            preceded(Self::whitespace, alt((tag("!"), tag("-")))),
+            |prefix_op| {
+                if prefix_op == "!" {
+                    Prefix::Bang
+                } else {
+                    Prefix::Minus
+                }
+            },
+        )(input)?;
 
         let (i, expr) = Self::parse_expression(i, Precedence::Prefix)?;
 
@@ -378,9 +386,9 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
-    use crate::{
+    use crate::parser::{
         ast::{Expr, Ident, Infix, Literal, Prefix, Statement},
-        parser::Parser,
+        Parser,
     };
 
     #[test]
@@ -691,6 +699,24 @@ mod test {
                         Box::new(Expr::Literal(Literal::Int(5))),
                     )),
                     Box::new(Expr::Literal(Literal::Int(2))),
+                ),
+            },
+            TestData {
+                input: "-50 + 100 + -50",
+                ast: Expr::Infix(
+                    Infix::Plus,
+                    Box::new(Expr::Infix(
+                        Infix::Plus,
+                        Box::new(Expr::Prefix(
+                            Prefix::Minus,
+                            Box::new(Expr::Literal(Literal::Int(50))),
+                        )),
+                        Box::new(Expr::Literal(Literal::Int(100))),
+                    )),
+                    Box::new(Expr::Prefix(
+                        Prefix::Minus,
+                        Box::new(Expr::Literal(Literal::Int(50))),
+                    )),
                 ),
             },
         ];
