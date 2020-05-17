@@ -274,6 +274,7 @@ impl Evaluator {
 mod test {
     use crate::{
         eval::{environment::Environment, object::Object, Evaluator},
+        lexer::{token::TokenSlice, Lexer},
         parser::{
             ast::{Expr, Infix, Literal, Statement},
             Parser,
@@ -695,9 +696,10 @@ mod test {
     }
 
     fn eval(input: &str) -> Object {
-        let program = Parser::parse_program(input);
+        let tokens = Lexer::new().lex_input(input).unwrap();
+        let program = Parser::parse(TokenSlice::from_tokens(&tokens)).unwrap();
 
-        Evaluator::new().eval(program.statements)
+        Evaluator::new().eval(program)
     }
 
     fn assert_integer_object(actual: Object, expected: i64) {
