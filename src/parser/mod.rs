@@ -12,6 +12,7 @@ use nom::{
     multi::many0,
     Err, IResult, InputIter, InputLength, Needed,
 };
+use std::collections::BTreeMap;
 
 pub struct Parser;
 
@@ -70,6 +71,8 @@ impl Parser {
                 Self::parse_paren,
                 Self::parse_if,
                 Self::parse_function,
+                Self::parse_array,
+                Self::parse_hash,
             ))(input)?;
 
             while !Self::peek_semicolon(i.clone()) && precedence < Self::peek_precedence(i.clone())
@@ -118,6 +121,8 @@ impl Parser {
                     arguments,
                 },
             )
+        } else if Self::peek_tag(input.clone(), Token::LBracket) {
+            Self::parse_index(left)(input)?
         } else {
             let (i, (operator, precedence)) = Self::parse_operator()(input.clone())?;
 
@@ -218,6 +223,56 @@ impl Parser {
         let (i, expr) = Self::parse_expression(Precedence::Lowest)(i)?;
 
         Ok((i, expr))
+    }
+
+    fn parse_array(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
+        let (i, _) = Self::tag(Token::LBracket)(input)?;
+        let (i, expr) = Self::parse_expression(Precedence::Lowest)(i)?;
+        let (i, mut expr_list) = many0(Self::parse_expr_list)(i)?;
+        expr_list.insert(0, expr);
+        let (i, _) = Self::tag(Token::RBracket)(i)?;
+
+        Ok((i, Expr::Array(expr_list)))
+    }
+
+    fn parse_index<'a>(left: Expr) -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, Expr> {
+        move |input: TokenSlice<'_>| {
+            let (i, _) = Self::tag(Token::LBracket)(input)?;
+            let (i, index) = Self::parse_expression(Precedence::Lowest)(i)?;
+            let (i, _) = Self::tag(Token::RBracket)(i)?;
+
+            Ok((i, Expr::Index(Box::new(left.clone()), Box::new(index))))
+        }
+    }
+
+    fn parse_hash<'a>(input: TokenSlice<'a>) -> IResult<TokenSlice<'a>, Expr> {
+        let (i, _) = Self::tag(Token::LBrace)(input)?;
+        let (i, pairs) = map(
+            many0(
+                |input: TokenSlice<'a>| -> IResult<TokenSlice<'a>, (Expr, Expr)> {
+                    let (i, key) = Self::parse_expression(Precedence::Lowest)(input)?;
+                    let (i, _) = Self::tag(Token::Colon)(i)?;
+                    let (i, value) = Self::parse_expression(Precedence::Lowest)(i)?;
+                    let (i, _) = if Self::peek_tag(i.clone(), Token::Comma) {
+                        Self::tag(Token::Comma)(i)?
+                    } else {
+                        (i.clone(), i.clone())
+                    };
+
+                    Ok((i, (key, value)))
+                },
+            ),
+            |flat_pairs: Vec<(Expr, Expr)>| {
+                flat_pairs
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect::<BTreeMap<Expr, Expr>>()
+            },
+        )(i.clone())?;
+
+        let (i, _) = Self::tag(Token::RBrace)(i)?;
+
+        Ok((i, Expr::HashLiteral(pairs)))
     }
 
     fn peek_tag(input: TokenSlice<'_>, tag: Token) -> bool {
@@ -328,6 +383,7 @@ impl Parser {
                 (Some(Infix::LessThanEqual), Precedence::LessGreater)
             }),
             map(Self::tag(Token::LParen), |_| (None, Precedence::Call)),
+            map(Self::tag(Token::LBracket), |_| (None, Precedence::Index)),
         ))
     }
 
@@ -361,6 +417,7 @@ mod test {
             Parser,
         },
     };
+    use std::collections::BTreeMap;
 
     #[test]
     fn let_statements() {
@@ -866,6 +923,153 @@ mod test {
                 &Expr::Literal(Literal::Int(4)),
                 Infix::Plus,
                 &Expr::Literal(Literal::Int(5)),
+            );
+        }
+    }
+
+    #[test]
+    fn string_literal_expr() {
+        let input = r#""hello world""#;
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(program[0], Statement::Expression(_)));
+        if let Statement::Expression(expr) = &program[0] {
+            assert_literal_expression(
+                expr,
+                &Expr::Literal(Literal::String("hello world".to_string())),
+            );
+        }
+    }
+
+    #[test]
+    fn parsing_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(program[0], Statement::Expression(Expr::Array(..))));
+        if let Statement::Expression(Expr::Array(elements)) = &program[0] {
+            assert_eq!(elements.len(), 3);
+            assert_literal_expression(&elements[0], &Expr::Literal(Literal::Int(1)));
+            assert_infix_expression(
+                &elements[1],
+                &Expr::Literal(Literal::Int(2)),
+                Infix::Multiply,
+                &Expr::Literal(Literal::Int(2)),
+            );
+            assert_infix_expression(
+                &elements[2],
+                &Expr::Literal(Literal::Int(3)),
+                Infix::Plus,
+                &Expr::Literal(Literal::Int(3)),
+            );
+        }
+    }
+
+    #[test]
+    fn parsing_index_expressions() {
+        let input = "myArray[1 + 1]";
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(program[0], Statement::Expression(Expr::Index(..))));
+        if let Statement::Expression(Expr::Index(left, index_expr)) = &program[0] {
+            assert_identifier(left, "myArray");
+            assert_infix_expression(
+                index_expr,
+                &Expr::Literal(Literal::Int(1)),
+                Infix::Plus,
+                &Expr::Literal(Literal::Int(1)),
+            );
+        }
+    }
+
+    #[test]
+    fn parsing_hash_literals_string_keys() {
+        let input = r#"{"one": 1, "two": 2, "three": 3}"#;
+        let mut expected = BTreeMap::new();
+        expected.insert(
+            Expr::Literal(Literal::String("one".to_string())),
+            Expr::Literal(Literal::Int(1)),
+        );
+        expected.insert(
+            Expr::Literal(Literal::String("two".to_string())),
+            Expr::Literal(Literal::Int(2)),
+        );
+        expected.insert(
+            Expr::Literal(Literal::String("three".to_string())),
+            Expr::Literal(Literal::Int(3)),
+        );
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(
+            program[0],
+            Statement::Expression(Expr::HashLiteral(..))
+        ));
+        if let Statement::Expression(Expr::HashLiteral(actual)) = &program[0] {
+            assert_eq!(actual, &expected);
+        }
+    }
+
+    #[test]
+    fn parsing_empty_hash_literal() {
+        let input = "{}";
+        let expected = BTreeMap::new();
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(
+            program[0],
+            Statement::Expression(Expr::HashLiteral(..))
+        ));
+        if let Statement::Expression(Expr::HashLiteral(actual)) = &program[0] {
+            assert_eq!(actual, &expected);
+        }
+    }
+
+    #[test]
+    fn parsing_hash_literal_with_expressions() {
+        let input = r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#;
+        let mut expected = BTreeMap::new();
+        expected.insert(
+            Expr::Literal(Literal::String("one".to_string())),
+            Expr::Infix(
+                Infix::Plus,
+                Box::new(Expr::Literal(Literal::Int(0))),
+                Box::new(Expr::Literal(Literal::Int(1))),
+            ),
+        );
+        expected.insert(
+            Expr::Literal(Literal::String("two".to_string())),
+            Expr::Infix(
+                Infix::Minus,
+                Box::new(Expr::Literal(Literal::Int(10))),
+                Box::new(Expr::Literal(Literal::Int(8))),
+            ),
+        );
+        expected.insert(
+            Expr::Literal(Literal::String("three".to_string())),
+            Expr::Infix(
+                Infix::Divide,
+                Box::new(Expr::Literal(Literal::Int(15))),
+                Box::new(Expr::Literal(Literal::Int(5))),
+            ),
+        );
+
+        let program = parse(input);
+        assert_eq!(program.len(), 1);
+        assert!(matches!(
+            program[0],
+            Statement::Expression(Expr::HashLiteral(..))
+        ));
+        if let Statement::Expression(Expr::HashLiteral(actual)) = &program[0] {
+            actual.iter().zip(expected).for_each(
+                |((actual_key, actual_value), (expected_key, expected_value))| {
+                    assert_literal_expression(actual_key, &expected_key);
+                    assert_eq!(actual_value, &expected_value);
+                },
             );
         }
     }

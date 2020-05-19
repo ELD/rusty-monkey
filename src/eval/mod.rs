@@ -2,9 +2,13 @@ use crate::{
     eval::{environment::Environment, object::Object},
     parser::ast::{Block, Expr, Infix, Literal, Prefix, Program, Statement},
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+};
 
-mod environment;
+pub mod environment;
 mod object;
 
 pub struct Evaluator {
@@ -20,8 +24,132 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: Rc::new(RefCell::new(Environment::new())),
+            environment: Self::add_builtins(Rc::new(RefCell::new(Environment::new()))),
         }
+    }
+
+    pub fn new_with_custom_environment(environment: Rc<RefCell<Environment>>) -> Self {
+        Self {
+            environment: Self::add_builtins(environment),
+        }
+    }
+
+    fn add_builtins(environment: Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
+        let mut environment_mut = environment.borrow_mut();
+        environment_mut.set(
+            "len",
+            Object::Builtin("len".to_string(), |args| {
+                if args.len() != 1 {
+                    return Object::Error(format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::String(s) => Object::Integer(s.len() as i64),
+                    Object::Array(array) => Object::Integer(array.len() as i64),
+                    _ => {
+                        Object::Error(format!("argument to `len` not supported for {:?}", args[0]))
+                    }
+                }
+            }),
+        );
+
+        environment_mut.set(
+            "first",
+            Object::Builtin("first".to_string(), |args| {
+                if args.len() != 1 {
+                    return Object::Error(format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+                match &args[0] {
+                    Object::Array(elems) => elems[0].clone(),
+                    _ => Object::Error(format!(
+                        "argument to `first` must be Object::Array(..), got={:?}",
+                        &args[0]
+                    )),
+                }
+            }),
+        );
+
+        environment_mut.set(
+            "last",
+            Object::Builtin("last".to_string(), |args| {
+                if args.len() != 1 {
+                    return Object::Error(format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+                match &args[0] {
+                    Object::Array(elems) if !elems.is_empty() => {
+                        let last = elems.len() - 1;
+                        elems[last].clone()
+                    }
+                    _ => Object::Error(format!(
+                        "argument to `last` must be ARRAY, got={:?}",
+                        &args[0]
+                    )),
+                }
+            }),
+        );
+
+        environment_mut.set(
+            "rest",
+            Object::Builtin("rest".to_string(), |args| {
+                if args.len() != 1 {
+                    return Object::Error(format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+                match &args[0] {
+                    Object::Array(elems) if !elems.is_empty() => Object::Array(elems[1..].into()),
+                    _ => Object::Error(format!(
+                        "argument to `rest` must be ARRAY, got={:?}",
+                        &args[0]
+                    )),
+                }
+            }),
+        );
+
+        environment_mut.set(
+            "push",
+            Object::Builtin("push".to_string(), |args| {
+                if args.len() != 2 {
+                    return Object::Error(format!(
+                        "wrong number of arguments. got={}, want=2",
+                        args.len()
+                    ));
+                }
+                match args[0].clone() {
+                    Object::Array(mut elems) => {
+                        elems.push(args[1].clone());
+                        Object::Array(elems)
+                    }
+                    _ => Object::Error(format!(
+                        "argument to `push` must be ARRAY, got={:?}",
+                        &args[0]
+                    )),
+                }
+            }),
+        );
+
+        environment_mut.set(
+            "puts",
+            Object::Builtin("puts".to_string(), |args| {
+                args.iter().for_each(|arg| {
+                    println!("{}", arg);
+                });
+                Object::Null
+            }),
+        );
+
+        drop(environment_mut);
+        environment
     }
 
     pub fn eval(&mut self, program: Program) -> Object {
@@ -113,20 +241,46 @@ impl Evaluator {
                 arguments,
             } => {
                 let func_object = self.eval_expr(function);
-                if Self::is_error(&func_object) {
-                    return func_object;
-                }
-                let args_objects = arguments
+
+                let args = arguments
                     .iter()
                     .map(|arg| self.eval_expr(arg))
                     .collect::<Vec<Object>>();
 
-                if args_objects.len() == 1 && Self::is_error(&args_objects[0]) {
-                    return args_objects[0].clone();
+                if Self::is_error(&args[0]) {
+                    return args[0].clone();
                 }
 
-                self.eval_func_application(func_object, args_objects)
+                match &func_object {
+                    Object::Function(..) => self.eval_func_application(args, func_object),
+                    Object::Builtin(..) => self.eval_builtin_func(args, func_object),
+                    Object::Error(_) => func_object,
+                    _ => Object::Error("something went wrong".to_string()),
+                }
             }
+            Expr::Array(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|elem| self.eval_expr(elem))
+                    .collect::<Vec<Object>>();
+                if Self::is_error(&elements[0]) {
+                    return elements[0].clone();
+                }
+
+                Object::Array(elements)
+            }
+            Expr::Index(left, index) => {
+                let left = self.eval_expr(left);
+                if Self::is_error(&left) {
+                    return left;
+                }
+                let index = self.eval_expr(index);
+                if Self::is_error(&index) {
+                    return index;
+                }
+                self.eval_index_expr(left, index)
+            }
+            Expr::HashLiteral(hash) => self.eval_hash_literal(hash),
             _ => Object::Null,
         }
     }
@@ -135,7 +289,7 @@ impl Evaluator {
         match lit {
             Literal::Int(i) => Object::Integer(*i),
             Literal::Bool(b) => Object::Boolean(*b),
-            _ => Object::Null,
+            Literal::String(s) => Object::String(s.clone()),
         }
     }
 
@@ -150,6 +304,9 @@ impl Evaluator {
         match (operator, &left, &right) {
             (_, Object::Integer(_), Object::Integer(_)) => {
                 self.eval_integer_infix_expr(operator, &left, &right)
+            }
+            (_, Object::String(_), Object::String(_)) => {
+                self.eval_string_infix_expr(operator, &left, &right)
             }
             (Infix::Equal, Object::Boolean(left), Object::Boolean(right)) => {
                 Object::Boolean(left == right)
@@ -238,7 +395,19 @@ impl Evaluator {
         }
     }
 
-    fn eval_func_application(&mut self, function: Object, args: Vec<Object>) -> Object {
+    fn eval_string_infix_expr(&self, operator: &Infix, left: &Object, right: &Object) -> Object {
+        match (operator, left, right) {
+            (Infix::Plus, Object::String(s1), Object::String(s2)) => {
+                Object::String(s1.to_owned() + s2)
+            }
+            (..) => Object::Error(format!(
+                "unknown operator: {:?} {} {:?}",
+                left, operator, right
+            )),
+        }
+    }
+
+    fn eval_func_application(&mut self, arguments: Vec<Object>, function: Object) -> Object {
         let (params, stmt, func_env) = match function {
             Object::Function(params, stmt, func_env) => (params, stmt, func_env),
             _ => return Object::Error(format!("not a function: {:?}", function)),
@@ -246,7 +415,7 @@ impl Evaluator {
 
         let original_env = self.environment.clone();
         let execution_env = Rc::new(RefCell::new(Environment::new_with_outer(func_env)));
-        params.iter().zip(args).for_each(|(param, arg)| {
+        params.iter().zip(arguments).for_each(|(param, arg)| {
             execution_env.borrow_mut().set(param, arg);
         });
         self.environment = execution_env;
@@ -254,6 +423,52 @@ impl Evaluator {
 
         self.environment = original_env;
         self.returned(eval_result)
+    }
+
+    fn eval_builtin_func(&self, arguments: Vec<Object>, builtin: Object) -> Object {
+        match builtin {
+            Object::Builtin(_, builtin_fn) => builtin_fn(arguments),
+            _ => Object::Error(format!("not a builtin: {:?}", builtin)),
+        }
+    }
+
+    fn eval_index_expr(&self, left: Object, index: Object) -> Object {
+        match (&left, &index) {
+            (Object::Array(..), Object::Integer(..)) => self.eval_array_index_expr(left, index),
+            (Object::Hash(..), ..) => self.eval_hash_index_expr(left, index),
+            _ => Object::Error(format!("index operator not supported: {:?}", left)),
+        }
+    }
+
+    fn eval_array_index_expr(&self, left: Object, index: Object) -> Object {
+        if let (Object::Array(array), Object::Integer(index)) = (left, index) {
+            if index < 0 || index > (array.len() - 1) as i64 {
+                return Object::Null;
+            }
+
+            return array[index as usize].clone();
+        }
+
+        Object::Null
+    }
+
+    fn eval_hash_index_expr(&self, left: Object, index: Object) -> Object {
+        if let Object::Hash(hash) = left {
+            return match hash.get(&index) {
+                Some(o) => o.clone(),
+                None => Object::Null,
+            };
+        }
+
+        Object::Null
+    }
+
+    fn eval_hash_literal(&mut self, hash: &BTreeMap<Expr, Expr>) -> Object {
+        Object::Hash(
+            hash.iter()
+                .map(|(key, value)| (self.eval_expr(key), self.eval_expr(value)))
+                .collect::<HashMap<Object, Object>>(),
+        )
     }
 
     fn is_truthy(object: Object) -> bool {
@@ -280,7 +495,7 @@ mod test {
             Parser,
         },
     };
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     #[derive(Debug)]
     struct TestDataSimple<T> {
@@ -586,6 +801,10 @@ mod test {
                 input: "foobar",
                 expected: "identifier not found: foobar",
             },
+            TestDataSimple {
+                input: r#""Hello" - "World""#,
+                expected: r#"unknown operator: Object::String("Hello") - Object::String("World")"#,
+            },
         ];
 
         test_data.into_iter().for_each(|test_datum| {
@@ -632,7 +851,7 @@ mod test {
                     Box::new(Expr::Ident("x".to_string())),
                     Box::new(Expr::Literal(Literal::Int(2))),
                 ))],
-                Rc::new(RefCell::new(Environment::new())),
+                Evaluator::add_builtins(Rc::new(RefCell::new(Environment::new()))),
             ),
         }];
 
@@ -692,6 +911,189 @@ mod test {
         test_data.into_iter().for_each(|test_datum| {
             let actual = eval(test_datum.input);
             assert_integer_object(actual, test_datum.expected);
+        });
+    }
+
+    #[test]
+    fn string_literal() {
+        let test_data = vec![TestDataSimple {
+            input: r#""Hello World!""#,
+            expected: Object::String("Hello World!".into()),
+        }];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
+        })
+    }
+
+    #[test]
+    fn builtin_functions() {
+        let test_data = vec![
+            TestDataSimple {
+                input: r#"len("")"#,
+                expected: Object::Integer(0),
+            },
+            TestDataSimple {
+                input: r#"len("four")"#,
+                expected: Object::Integer(4),
+            },
+            TestDataSimple {
+                input: r#"len("hello world")"#,
+                expected: Object::Integer(11),
+            },
+            TestDataSimple {
+                input: r#"len(1)"#,
+                expected: Object::Error(
+                    "argument to `len` not supported for Object::Integer(1)".into(),
+                ),
+            },
+            TestDataSimple {
+                input: r#"len("one", "two")"#,
+                expected: Object::Error("wrong number of arguments. got=2, want=1".into()),
+            },
+        ];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
+        })
+    }
+
+    #[test]
+    fn array_literal() {
+        let test_data = vec![TestDataSimple {
+            input: "[1, 2 * 2, 3 + 3]",
+            expected: Object::Array(vec![
+                Object::Integer(1),
+                Object::Integer(4),
+                Object::Integer(6),
+            ]),
+        }];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
+        });
+    }
+
+    #[test]
+    fn array_index_exprs() {
+        let test_data = vec![
+            TestDataSimple {
+                input: "[1, 2, 3][0]",
+                expected: Object::Integer(1),
+            },
+            TestDataSimple {
+                input: "[1, 2, 3][1]",
+                expected: Object::Integer(2),
+            },
+            TestDataSimple {
+                input: "[1, 2, 3][2]",
+                expected: Object::Integer(3),
+            },
+            TestDataSimple {
+                input: "let i = 0; [1][i]",
+                expected: Object::Integer(1),
+            },
+            TestDataSimple {
+                input: "[1, 2, 3][1 + 1];",
+                expected: Object::Integer(3),
+            },
+            TestDataSimple {
+                input: "let myArray = [1, 2, 3]; myArray[2];",
+                expected: Object::Integer(3),
+            },
+            TestDataSimple {
+                input: "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                expected: Object::Integer(6),
+            },
+            TestDataSimple {
+                input: "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i];",
+                expected: Object::Integer(2),
+            },
+            TestDataSimple {
+                input: "[1, 2, 3][3]",
+                expected: Object::Null,
+            },
+            TestDataSimple {
+                input: "[1, 2, 3][-1]",
+                expected: Object::Null,
+            },
+        ];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
+        })
+    }
+
+    #[test]
+    fn hash_literals() {
+        let test_data = vec![TestDataSimple {
+            input: r#"let two = "two";
+            {
+                "one": 10 - 9,
+                two: 1 + 1,
+                "thr" + "ee": 6 / 2,
+                4: 4,
+                true: 5,
+                false: 6
+            }"#,
+            expected: {
+                let mut map = HashMap::new();
+                map.insert(Object::String("one".to_string()), Object::Integer(1));
+                map.insert(Object::String("two".to_string()), Object::Integer(2));
+                map.insert(Object::String("three".to_string()), Object::Integer(3));
+                map.insert(Object::Integer(4), Object::Integer(4));
+                map.insert(Object::Boolean(true), Object::Integer(5));
+                map.insert(Object::Boolean(false), Object::Integer(6));
+                Object::Hash(map)
+            },
+        }];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
+        })
+    }
+
+    #[test]
+    fn hash_index_expressions() {
+        let test_data = vec![
+            TestDataSimple {
+                input: r#"{"foo": 5}["foo"]"#,
+                expected: Object::Integer(5),
+            },
+            TestDataSimple {
+                input: r#"{"foo": 5}["bar"]"#,
+                expected: Object::Null,
+            },
+            TestDataSimple {
+                input: r#"let key = "foo"; {"foo": 5}[key]"#,
+                expected: Object::Integer(5),
+            },
+            TestDataSimple {
+                input: r#"{}["foo"]"#,
+                expected: Object::Null,
+            },
+            TestDataSimple {
+                input: r#"{5: 5}[5]"#,
+                expected: Object::Integer(5),
+            },
+            TestDataSimple {
+                input: r#"{true: 5}[true]"#,
+                expected: Object::Integer(5),
+            },
+            TestDataSimple {
+                input: r#"{false: 5}[false]"#,
+                expected: Object::Integer(5),
+            },
+        ];
+
+        test_data.into_iter().for_each(|test_datum| {
+            let actual = eval(test_datum.input);
+            assert_object(actual, test_datum.expected);
         });
     }
 

@@ -1,10 +1,11 @@
+use nom::lib::std::collections::BTreeMap;
 use std::{fmt, fmt::Display};
 
 pub(crate) type Program = Block;
 pub(crate) type Block = Vec<Statement>;
 pub(crate) type Ident = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Statement {
     Let(Ident, Expr),
     Return(Expr),
@@ -12,7 +13,7 @@ pub enum Statement {
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Expr {
     Ident(Ident),
     Literal(Literal),
@@ -31,23 +32,26 @@ pub enum Expr {
         function: Box<Expr>,
         arguments: Vec<Expr>,
     },
+    Array(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+    HashLiteral(BTreeMap<Expr, Expr>),
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Literal {
     Int(i64),
     String(String),
     Bool(bool),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Ord, PartialOrd, Hash)]
 pub enum Prefix {
     Minus,
     Bang,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Ord, PartialOrd, Hash)]
 pub enum Infix {
     Plus,
     Minus,
@@ -87,4 +91,5 @@ pub enum Precedence {
     Product,
     Prefix,
     Call,
+    Index,
 }

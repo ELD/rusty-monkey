@@ -45,6 +45,9 @@ impl Lexer {
             Self::static_token_lexer_generator::<VerboseError<&str>>("}", Token::RBrace),
             Self::static_token_lexer_generator::<VerboseError<&str>>(",", Token::Comma),
             Self::static_token_lexer_generator::<VerboseError<&str>>(";", Token::Semicolon),
+            Self::static_token_lexer_generator::<VerboseError<&str>>("[", Token::LBracket),
+            Self::static_token_lexer_generator::<VerboseError<&str>>("]", Token::RBracket),
+            Self::static_token_lexer_generator::<VerboseError<&str>>(":", Token::Colon),
         ));
 
         let keyword_parsers = alt((
@@ -58,6 +61,7 @@ impl Lexer {
         ));
 
         let dynamic_parsers = alt((
+            Self::string_literal_lexer::<VerboseError<&str>>(),
             Self::number_lexer::<VerboseError<&str>>(),
             Self::ident_lexer::<VerboseError<&str>>(),
         ));
@@ -85,6 +89,19 @@ impl Lexer {
         map(preceded(Self::whitespace, tag(symbol)), move |_| {
             token.clone()
         })
+    }
+
+    fn string_literal_lexer<'a, E>() -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
+    where
+        E: ParseError<&'a str>,
+    {
+        move |input: &'a str| {
+            let (i, _) = preceded(Self::whitespace, tag("\""))(input)?;
+            let (i, string_literal) = take_while(|c: char| c != '"')(i)?;
+            let (i, _) = preceded(Self::whitespace, tag("\""))(i)?;
+
+            Ok((i, Token::String(string_literal.into())))
+        }
     }
 
     fn ident_lexer<'a, E>() -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
@@ -176,6 +193,10 @@ if (5 < 10) {
 
 10 == 10;
 10 != 9;
+"foobar"
+"foo bar"
+[1, 2];
+{"foo": "bar"}
         "#;
 
         let expected_tokens = vec![
@@ -252,6 +273,19 @@ if (5 < 10) {
             Token::NotEq,
             Token::Int(9),
             Token::Semicolon,
+            Token::String("foobar".into()),
+            Token::String("foo bar".into()),
+            Token::LBracket,
+            Token::Int(1),
+            Token::Comma,
+            Token::Int(2),
+            Token::RBracket,
+            Token::Semicolon,
+            Token::LBrace,
+            Token::String("foo".to_string()),
+            Token::Colon,
+            Token::String("bar".to_string()),
+            Token::RBrace,
             Token::Eof,
         ];
 

@@ -12,6 +12,9 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
+    Colon,
 
     // Operators
     Assign,
@@ -52,6 +55,9 @@ impl ToString for Token {
             Token::RParen => ")".to_string(),
             Token::LBrace => "{".to_string(),
             Token::RBrace => "}".to_string(),
+            Token::LBracket => "[".to_string(),
+            Token::RBracket => "]".to_string(),
+            Token::Colon => ":".to_string(),
             Token::Assign => "=".to_string(),
             Token::Plus => "+".to_string(),
             Token::Minus => "-".to_string(),
