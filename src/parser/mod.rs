@@ -16,7 +16,7 @@ use nom::{
 pub struct Parser;
 
 impl Parser {
-    pub fn parse(tokens: TokenSlice) -> Result<Program, String> {
+    pub fn parse(tokens: TokenSlice<'_>) -> Result<Program, String> {
         let program = match many0(Self::parse_statement())(tokens) {
             Ok((_, statements)) => statements,
             _ => panic!("parse error"),
@@ -33,7 +33,7 @@ impl Parser {
         ))
     }
 
-    fn parse_let_statement(input: TokenSlice) -> IResult<TokenSlice, Statement> {
+    fn parse_let_statement(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Statement> {
         let (i, _) = Self::tag(Token::Let)(input)?;
         let (i, ident) = Self::parse_ident()(i)?;
         let (i, _) = Self::tag(Token::Assign)(i)?;
@@ -44,7 +44,7 @@ impl Parser {
         Ok((i, Statement::Let(ident, expr)))
     }
 
-    fn parse_return_statement(input: TokenSlice) -> IResult<TokenSlice, Statement> {
+    fn parse_return_statement(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Statement> {
         let (i, _) = Self::tag(Token::Return)(input)?;
 
         let (i, expr) = Self::parse_expression(Precedence::Lowest)(i)?;
@@ -52,7 +52,7 @@ impl Parser {
         Ok((i, Statement::Return(expr)))
     }
 
-    fn parse_expression_statement(input: TokenSlice) -> IResult<TokenSlice, Statement> {
+    fn parse_expression_statement(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Statement> {
         let (i, expr) = Self::parse_expression(Precedence::Lowest)(input)?;
         let (i, _) = Self::parse_to_semicolon_if_exists()(i)?;
 
@@ -62,7 +62,7 @@ impl Parser {
     fn parse_expression<'a>(
         precedence: Precedence,
     ) -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, Expr> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             let (mut i, mut left) = alt((
                 map(Self::parse_literal(), Expr::Literal),
                 map(Self::parse_ident(), Expr::Ident),
@@ -87,7 +87,7 @@ impl Parser {
         }
     }
 
-    fn parse_paren(input: TokenSlice) -> IResult<TokenSlice, Expr> {
+    fn parse_paren(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
         let (i, _) = Self::tag(Token::LParen)(input)?;
         let (i, expr) = Self::parse_expression(Precedence::Lowest)(i)?;
         let (i, _) = Self::tag(Token::RParen)(i)?;
@@ -95,7 +95,7 @@ impl Parser {
         Ok((i, expr))
     }
 
-    fn parse_prefix(input: TokenSlice) -> IResult<TokenSlice, Expr> {
+    fn parse_prefix(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
         let (i, prefix) = alt((
             map(Self::tag(Token::Bang), |_| Prefix::Bang),
             map(Self::tag(Token::Minus), |_| Prefix::Minus),
@@ -106,7 +106,7 @@ impl Parser {
         Ok((i, Expr::Prefix(prefix, Box::new(expr))))
     }
 
-    fn parse_infix(input: TokenSlice, left: Expr) -> IResult<TokenSlice, Expr> {
+    fn parse_infix(input: TokenSlice<'_>, left: Expr) -> IResult<TokenSlice<'_>, Expr> {
         let (i, expr) = if Self::peek_tag(input.clone(), Token::LParen) {
             let (i, _) = Self::tag(Token::LParen)(input)?;
             let (i, arguments) = Self::parse_call_args()(i)?;
@@ -130,7 +130,7 @@ impl Parser {
         Ok((i, expr))
     }
 
-    fn parse_if(input: TokenSlice) -> IResult<TokenSlice, Expr> {
+    fn parse_if(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
         let (i, _) = Self::tag(Token::If)(input)?;
         let (i, _) = Self::tag(Token::LParen)(i)?;
         let (i, condition) = Self::parse_expression(Precedence::Lowest)(i)?;
@@ -165,7 +165,7 @@ impl Parser {
         ))
     }
 
-    fn parse_function(input: TokenSlice) -> IResult<TokenSlice, Expr> {
+    fn parse_function(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
         let (i, _) = Self::tag(Token::Function)(input)?;
         let (i, _) = Self::tag(Token::LParen)(i)?;
         let (i, params) = Self::parse_function_params()(i)?;
@@ -179,7 +179,7 @@ impl Parser {
 
     fn parse_function_params<'a>(
     ) -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, Vec<Ident>> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             if Self::peek_tag(input.clone(), Token::RParen) {
                 return Ok((input, vec![]));
             }
@@ -193,7 +193,7 @@ impl Parser {
     }
 
     fn parse_call_args<'a>() -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, Vec<Expr>> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             if Self::peek_tag(input.clone(), Token::RParen) {
                 return Ok((input, vec![]));
             }
@@ -206,21 +206,21 @@ impl Parser {
         }
     }
 
-    fn parse_identifier_list(input: TokenSlice) -> IResult<TokenSlice, Ident> {
+    fn parse_identifier_list(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Ident> {
         let (i, _) = Self::tag(Token::Comma)(input)?;
         let (i, ident) = Self::parse_ident()(i)?;
 
         Ok((i, ident))
     }
 
-    fn parse_expr_list(input: TokenSlice) -> IResult<TokenSlice, Expr> {
+    fn parse_expr_list(input: TokenSlice<'_>) -> IResult<TokenSlice<'_>, Expr> {
         let (i, _) = Self::tag(Token::Comma)(input)?;
         let (i, expr) = Self::parse_expression(Precedence::Lowest)(i)?;
 
         Ok((i, expr))
     }
 
-    fn peek_tag(input: TokenSlice, tag: Token) -> bool {
+    fn peek_tag(input: TokenSlice<'_>, tag: Token) -> bool {
         let result = peek(Self::tag(tag))(input);
         match result {
             Ok(..) => true,
@@ -231,7 +231,7 @@ impl Parser {
     fn tag<'a>(
         tag: Token,
     ) -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, TokenSlice<'a>> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             let i2 = input.clone();
 
             let (i, res) = take(1usize)(input)?;
@@ -249,7 +249,7 @@ impl Parser {
     where
         O: From<&'a String>,
     {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             let (i, res) = take(1usize)(input)?;
 
             if res.input_len() == 0 {
@@ -263,7 +263,7 @@ impl Parser {
     }
 
     fn parse_literal<'a>() -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, Literal> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             let (i, res) = take(1usize)(input)?;
 
             if res.input_len() == 0 {
@@ -280,14 +280,14 @@ impl Parser {
         }
     }
 
-    fn peek_precedence(input: TokenSlice) -> Precedence {
+    fn peek_precedence(input: TokenSlice<'_>) -> Precedence {
         match peek(Self::parse_operator())(input) {
             Ok((_, res)) => res.1,
             _ => Precedence::Lowest,
         }
     }
 
-    fn peek_operator(input: TokenSlice) -> bool {
+    fn peek_operator(input: TokenSlice<'_>) -> bool {
         match peek(Self::parse_operator())(input) {
             Ok(..) => true,
             _ => false,
@@ -331,8 +331,8 @@ impl Parser {
         ))
     }
 
-    fn peek_semicolon(input: TokenSlice) -> bool {
-        let result: IResult<TokenSlice, TokenSlice> = peek(take(1usize))(input);
+    fn peek_semicolon(input: TokenSlice<'_>) -> bool {
+        let result: IResult<TokenSlice<'_>, TokenSlice<'_>> = peek(take(1usize))(input);
         match result {
             Ok((_, res)) => res.iter_elements().next() == Some(&Token::Semicolon),
             _ => false,
@@ -341,7 +341,7 @@ impl Parser {
 
     fn parse_to_semicolon_if_exists<'a>(
     ) -> impl FnMut(TokenSlice<'a>) -> IResult<TokenSlice<'a>, TokenSlice<'a>> {
-        move |input: TokenSlice| {
+        move |input: TokenSlice<'_>| {
             if Self::peek_semicolon(input.clone()) {
                 let (i, _) = take_while(|token| token != &Token::Semicolon)(input.clone())?;
                 take(1usize)(i)
