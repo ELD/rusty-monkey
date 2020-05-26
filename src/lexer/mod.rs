@@ -82,7 +82,7 @@ impl Lexer {
     fn static_token_lexer_generator<'a, E>(
         symbol: &'a str,
         token: Token,
-    ) -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
+    ) -> impl Fn(&'a str) -> IResult<&'a str, Token, E>
     where
         E: ParseError<&'a str>,
     {
@@ -91,7 +91,7 @@ impl Lexer {
         })
     }
 
-    fn string_literal_lexer<'a, E>() -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
+    fn string_literal_lexer<'a, E>() -> impl Fn(&'a str) -> IResult<&'a str, Token, E>
     where
         E: ParseError<&'a str>,
     {
@@ -104,7 +104,7 @@ impl Lexer {
         }
     }
 
-    fn ident_lexer<'a, E>() -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
+    fn ident_lexer<'a, E>() -> impl Fn(&'a str) -> IResult<&'a str, Token, E>
     where
         E: ParseError<&'a str>,
     {
@@ -120,7 +120,7 @@ impl Lexer {
         )
     }
 
-    fn number_lexer<'a, E>() -> impl FnMut(&'a str) -> IResult<&'a str, Token, E>
+    fn number_lexer<'a, E>() -> impl Fn(&'a str) -> IResult<&'a str, Token, E>
     where
         E: ParseError<&'a str>,
     {

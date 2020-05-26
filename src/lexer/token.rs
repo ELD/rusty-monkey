@@ -1,4 +1,4 @@
-use nom::{Compare, CompareResult, InputIter, InputLength, InputTake, UnspecializedInput};
+use nom::{Compare, CompareResult, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 use std::{iter::Enumerate, slice::Iter};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -161,6 +161,12 @@ impl<'a> InputIter for TokenSlice<'a> {
         } else {
             None
         }
+    }
+}
+
+impl<'a> Offset for TokenSlice<'a> {
+    fn offset(&self, second: &Self) -> usize {
+        self.slice.len() - second.slice.len()
     }
 }
 
