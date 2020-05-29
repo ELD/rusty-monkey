@@ -1,7 +1,9 @@
 use libmonkey::{
     lexer::{token::TokenSlice, Lexer},
-    lexer_ng::{self, token_ng},
-    parser_ng::ParserNg,
+    ng::{
+        lexer_ng::{self, token_ng},
+        parser_ng::ParserNg,
+    },
     util::convert_error_tokenslice,
 };
 use token_ng::{Token, TokenType};
@@ -50,6 +52,6 @@ fn main() {
         span: (0, 2),
     };
 
-    eprintln!("Token NG: {:?}", token_ng);
-    eprintln!("Lexer NG: {:?}", tokens4ng);
+    eprintln!("Token NG: {:#?}", token_ng);
+    eprintln!("Lexer NG: {:#?}", tokens4ng);
 }

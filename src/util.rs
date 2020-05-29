@@ -1,9 +1,24 @@
-use crate::lexer::token::TokenSlice;
+use crate::{lexer::token::TokenSlice, ng::lexer_ng::Span};
 use nom::{
-    error::{VerboseError, VerboseErrorKind},
+    error::{convert_error, VerboseError, VerboseErrorKind},
     InputIter, Offset,
 };
 use std::fmt::Write;
+
+pub fn convert_error_span(input: &str, e: VerboseError<Span<'_>>) -> String {
+    let converted_verbose_error = e
+        .errors
+        .into_iter()
+        .map(|(i, error_kind)| (*i.fragment(), error_kind))
+        .collect::<Vec<(&str, VerboseErrorKind)>>();
+
+    convert_error(
+        input,
+        VerboseError {
+            errors: converted_verbose_error,
+        },
+    )
+}
 
 pub fn convert_error_tokenslice(input: TokenSlice<'_>, e: VerboseError<TokenSlice<'_>>) -> String {
     let mut result = String::new();

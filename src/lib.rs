@@ -4,5 +4,4 @@ pub mod parser;
 pub mod repl;
 pub mod util;
 
-pub mod lexer_ng;
-pub mod parser_ng;
+pub mod ng;

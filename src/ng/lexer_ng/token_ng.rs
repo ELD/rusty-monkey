@@ -1,23 +1,23 @@
 use std::fmt::{Debug, Display, Formatter, Result};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Token {
     pub token_type: TokenType,
     pub line: u32,
-    pub span: (u32, u32),
+    pub span: (usize, usize),
 }
 
 impl Debug for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
-            "Token {{ type: {}, line: {}, span: {}..{} }}",
+            "Token {{ type: {:?}, line: {}, span: {}..{} }}",
             self.token_type, self.line, self.span.0, self.span.1
         )
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum TokenType {
     Eof,
 
