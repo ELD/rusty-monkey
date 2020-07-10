@@ -1,10 +1,57 @@
 version: 2.1
-orbs:
-  rust: glotrade/rust@0.1.3
+executors:
+  default:
+    machine:
+      image: ubuntu-1604:202004-01
+  
+jobs:
+  install_rust:
+    executor: default
+    steps:
+      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -- -y --default-toolchain nightly --profile default
+  checkout:
+    executor: default
+    steps:
+      - checkout
+  clippy:
+    executor: default
+    steps:
+      - attach_workspace:
+          at: .cargo/
+      - run: cargo clippy --all --all-targets -- -Dwarnings -Drust-2018-idioms
+  test:
+    executor: default
+    steps:
+      - attach_workspace:
+          at: .cargo/
+      - restore_cache:
+          key: cargo-lock-{{ checksum Cargo.lock }}
+      - run: cargo test
+      - save_cache:
+          key: cargo-lock-{{ checksum Cargo.lock }}
+          paths:
+            - target/
+  fmt:
+    executor: default
+    steps:
+      - attach_workspace:
+          at: .cargo/
+      - run: cargo fmt --all -- --check
+  persist_workspace:
+    executor: default
+    steps:
+      - persist_to_workspace:
+          root: /home/circleci
+          paths:
+            - .cargo/registry
+            - .cargo/git
+
 workflows:
-  lint-and-test:
+  lint_and_test:
     jobs:
-      - rust/clippy:
-          toolchain: 'nightly'
-      - rust/test:
-          toolchain: 'nightly'
+      - install_rust
+      - checkout
+      - fmt
+      - clippy
+      - test
+      - persist_workspace
