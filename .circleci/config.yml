@@ -12,6 +12,7 @@ jobs:
       - checkout
       - run: |
          source /home/circleci/.cargo/env
+         cargo update
          cargo fetch
       - persist_to_workspace:
           root: /home/circleci
