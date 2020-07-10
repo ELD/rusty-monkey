@@ -18,6 +18,7 @@ jobs:
           root: /home/circleci
           paths:
             - .cargo/
+            - .rustup/
             - project/
   clippy:
     executor: default
