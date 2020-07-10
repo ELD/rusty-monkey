@@ -10,8 +10,9 @@ jobs:
     steps:
       - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile default
       - checkout
-      - run: source /home/circleci/.cargo/env
-      - run: cargo fetch
+      - run: |
+         source /home/circleci/.cargo/env
+         cargo fetch
       - persist_to_workspace:
           root: /home/circleci
           paths:
@@ -21,8 +22,9 @@ jobs:
     steps:
       - attach_workspace:
           at: .
-      - run: source /home/circleci/.cargo/env
-      - run: cargo clippy --all --all-targets -- -Dwarnings -Drust-2018-idioms
+      - run: |
+          source /home/circleci/.cargo/env
+          cargo clippy --all --all-targets -- -Dwarnings -Drust-2018-idioms
   test:
     executor: default
     steps:
@@ -30,8 +32,9 @@ jobs:
           at: .
       - restore_cache:
           key: cargo-lock-{{ checksum Cargo.lock }}
-      - run: source /home/circleci/.cargo/env
-      - run: cargo test
+      - run: |
+          source /home/circleci/.cargo/env
+          cargo test
       - save_cache:
           key: cargo-lock-{{ checksum Cargo.lock }}
           paths:
@@ -41,8 +44,9 @@ jobs:
     steps:
       - attach_workspace:
           at: .
-      - run: source /home/circleci/.cargo/env
-      - run: cargo fmt --all -- --check
+      - run: |
+          source /home/circleci/.cargo/env
+          cargo fmt --all -- --check
 
 workflows:
   lint_and_test:
