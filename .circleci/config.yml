@@ -5,33 +5,32 @@ executors:
       image: ubuntu-1604:202004-01
   
 jobs:
-  install_rust:
+  install_rust_and_checkout:
     executor: default
     steps:
       - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile default
-  checkout:
-    executor: default
-    steps:
       - checkout
+      - run: source /home/circleci/.cargo/env
       - run: cargo fetch
       - persist_to_workspace:
           root: /home/circleci
           paths:
-            - .cargo/registry
-            - .cargo/git
+            - .cargo/
   clippy:
     executor: default
     steps:
       - attach_workspace:
-          at: .cargo/
+          at: .
+      - run: source /home/circleci/.cargo/env
       - run: cargo clippy --all --all-targets -- -Dwarnings -Drust-2018-idioms
   test:
     executor: default
     steps:
       - attach_workspace:
-          at: .cargo/
+          at: .
       - restore_cache:
           key: cargo-lock-{{ checksum Cargo.lock }}
+      - run: source /home/circleci/.cargo/env
       - run: cargo test
       - save_cache:
           key: cargo-lock-{{ checksum Cargo.lock }}
@@ -41,18 +40,17 @@ jobs:
     executor: default
     steps:
       - attach_workspace:
-          at: .cargo/
+          at: .
+      - run: source /home/circleci/.cargo/env
       - run: cargo fmt --all -- --check
 
 workflows:
   lint_and_test:
     jobs:
-      - install_rust
-      - checkout:
-          requires: [install_rust]
+      - install_rust_and_checkout
       - fmt:
-          requires: [checkout]
+          requires: [install_rust_and_checkout]
       - clippy:
-          requires: [checkout]
+          requires: [install_rust_and_checkout]
       - test:
-          requires: [checkout]
+          requires: [install_rust_and_checkout]
