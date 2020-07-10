@@ -13,6 +13,12 @@ jobs:
     executor: default
     steps:
       - checkout
+      - run: cargo fetch
+      - persist_to_workspace:
+          root: /home/circleci
+          paths:
+            - .cargo/registry
+            - .cargo/git
   clippy:
     executor: default
     steps:
@@ -37,21 +43,15 @@ jobs:
       - attach_workspace:
           at: .cargo/
       - run: cargo fmt --all -- --check
-  persist_workspace:
-    executor: default
-    steps:
-      - persist_to_workspace:
-          root: /home/circleci
-          paths:
-            - .cargo/registry
-            - .cargo/git
 
 workflows:
   lint_and_test:
     jobs:
       - install_rust
       - checkout
-      - fmt
-      - clippy
-      - test
-      - persist_workspace
+      - fmt:
+          requires: [checkout]
+      - clippy:
+          requires: [checkout]
+      - test:
+          requires: [checkout]
