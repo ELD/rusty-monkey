@@ -34,12 +34,12 @@ jobs:
       - attach_workspace:
           at: /home/circleci
       - restore_cache:
-          key: cargo-lock-{{ checksum "Cargo.lock" }}
+          key: cargo-lock-
       - run: |
           source /home/circleci/.cargo/env
           cargo test
       - save_cache:
-          key: cargo-lock-{{ checksum "Cargo.lock" }}
+          key: cargo-lock-
           paths:
             - target/
   fmt:
