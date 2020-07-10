@@ -8,7 +8,7 @@ jobs:
   install_rust:
     executor: default
     steps:
-      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -- -y --default-toolchain nightly --profile default
+      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile default
   checkout:
     executor: default
     steps:
@@ -48,7 +48,8 @@ workflows:
   lint_and_test:
     jobs:
       - install_rust
-      - checkout
+      - checkout:
+          requires: [install_rust]
       - fmt:
           requires: [checkout]
       - clippy:
