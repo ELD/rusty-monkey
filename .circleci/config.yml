@@ -39,7 +39,7 @@ jobs:
           source /home/circleci/.cargo/env
           cargo test
       - save_cache:
-          key: cargo-lock-
+          key: cargo-lock-{{ epoch }}
           paths:
             - target/
   fmt:
